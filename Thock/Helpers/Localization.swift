@@ -536,6 +536,21 @@ struct L10n {
         }
     }
 
+    static func previewSoundpack(_ name: String) -> String {
+        switch lang {
+        case .english: return "Preview \(name)"
+        case .spanish: return "Escuchar \(name)"
+        case .french: return "Écouter \(name)"
+        case .chinese: return "试听\(name)"
+        case .japanese: return "\(name)を試聴"
+        case .german: return "\(name) anhören"
+        case .vietnamese: return "Nghe thử \(name)"
+        case .italian: return "Ascolta \(name)"
+        case .portuguese: return "Ouvir \(name)"
+        case .russian: return "Прослушать \(name)"
+        }
+    }
+
     static func installSoundpack(_ name: String) -> String {
         switch lang {
         case .english: return "Install \(name)"
