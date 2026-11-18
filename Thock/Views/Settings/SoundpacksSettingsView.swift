@@ -80,7 +80,8 @@ struct SoundpacksSettingsView: View {
                             isDownloading: service.downloadingIds.contains(entry.id),
                             isLast: false,
                             onInstall: { Task { await service.install(entry) } },
-                            onUninstall: { service.uninstall(entry) }
+                            onUninstall: { service.uninstall(entry) },
+                            onPreview: previewAction(for: entry)
                         )
                     }
                     ForEach(Array(customKeyboard.enumerated()), id: \.element.id) { index, soundpack in
@@ -97,7 +98,8 @@ struct SoundpacksSettingsView: View {
                             isDownloading: service.downloadingIds.contains(entry.id),
                             isLast: index == uninstalledKeyboard.count - 1,
                             onInstall: { Task { await service.install(entry) } },
-                            onUninstall: { service.uninstall(entry) }
+                            onUninstall: { service.uninstall(entry) },
+                            onPreview: previewAction(for: entry)
                         )
                     }
                     if keyboardRegistryEmpty && customKeyboard.isEmpty {
@@ -153,7 +155,8 @@ struct SoundpacksSettingsView: View {
                             isDownloading: service.downloadingIds.contains(entry.id),
                             isLast: false,
                             onInstall: { Task { await service.install(entry) } },
-                            onUninstall: { service.uninstall(entry) }
+                            onUninstall: { service.uninstall(entry) },
+                            onPreview: previewAction(for: entry)
                         )
                     }
                     ForEach(Array(customMouse.enumerated()), id: \.element.id) { index, soundpack in
@@ -170,7 +173,8 @@ struct SoundpacksSettingsView: View {
                             isDownloading: service.downloadingIds.contains(entry.id),
                             isLast: index == uninstalledMouse.count - 1,
                             onInstall: { Task { await service.install(entry) } },
-                            onUninstall: { service.uninstall(entry) }
+                            onUninstall: { service.uninstall(entry) },
+                            onPreview: previewAction(for: entry)
                         )
                     }
                     if mouseRegistryEmpty && customMouse.isEmpty {
@@ -210,6 +214,36 @@ struct SoundpacksSettingsView: View {
     }
 }
 
+extension SoundpacksSettingsView {
+    /// The ▶ action for a catalog row, or nil when the pack isn't downloaded.
+    func previewAction(for entry: SoundpackRegistryEntry) -> (() -> Void)? {
+        let installed = service.installedIds.contains(entry.id)
+        guard let pack = SoundpackPreviewTarget.soundpack(for: entry, isInstalled: installed,
+                                                          lookup: { SoundpackDatabase().getSoundpack(by: $0) })
+        else { return nil }
+        return { SoundpackPreviewPlayer.shared.preview(pack) }
+    }
+}
+
+// MARK: - Preview Button
+
+private struct SoundpackPreviewButton: View {
+    let name: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "play.fill")
+                .font(.system(size: 14))
+                .foregroundColor(.secondary)
+                .frame(width: 22, height: 22)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(L10n.previewSoundpack(name)))
+        .help(L10n.previewSoundpack(name))
+    }
+}
+
 // MARK: - Row View
 
 private struct SoundpackRegistryRowView: View {
@@ -219,6 +253,7 @@ private struct SoundpackRegistryRowView: View {
     let isLast: Bool
     let onInstall: () -> Void
     let onUninstall: () -> Void
+    var onPreview: (() -> Void)? = nil
     
     var body: some View {
         SettingsRowView(
@@ -245,14 +280,19 @@ private struct SoundpackRegistryRowView: View {
                 .controlSize(.small)
                 .frame(width: 22, height: 22)
         } else if isInstalled {
-            Button(action: onUninstall) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 20))
-                    .foregroundColor(.secondary.opacity(0.6))
+            HStack(spacing: 6) {
+                if let onPreview {
+                    SoundpackPreviewButton(name: entry.metadata.name, action: onPreview)
+                }
+                Button(action: onUninstall) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(.secondary.opacity(0.6))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text(L10n.removeSoundpack(entry.metadata.name)))
+                .help("Remove soundpack")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text(L10n.removeSoundpack(entry.metadata.name)))
-            .help("Remove soundpack")
         } else {
             Button(action: onInstall) {
                 Image(systemName: "arrow.down.circle")
@@ -285,14 +325,19 @@ private struct SoundpackCustomRowView: View {
             title: soundpack.name,
             subtitle: subtitle,
             control: AnyView(
-                Button(action: onUninstall) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 20))
-                        .foregroundColor(.secondary.opacity(0.6))
-                }
+                HStack(spacing: 6) {
+                    SoundpackPreviewButton(name: soundpack.name) {
+                        SoundpackPreviewPlayer.shared.preview(soundpack)
+                    }
+                    Button(action: onUninstall) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(.secondary.opacity(0.6))
+                    }
                     .buttonStyle(.plain)
                     .accessibilityLabel(Text(L10n.removeSoundpack(soundpack.name)))
                     .help("Remove soundpack")
+                }
             ),
             isLast: isLast
         )
