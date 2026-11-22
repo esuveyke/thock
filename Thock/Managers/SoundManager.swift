@@ -937,40 +937,77 @@ final class SoundManager {
         // Keep the readiness check, restart, and voice admission atomic with idle stop/replacement.
         audioLifecycleLock.lock()
         defer { audioLifecycleLock.unlock() }
-        queueStateLock.lock()
-        let ready = isReady
-        queueStateLock.unlock()
-        
-        guard ready else {
-            Logger.audio.warning("Playback blocked: audio system not ready")
-            return
-        }
-        
+        guard isAudioReady() else { return }
+
         guard let pcmSound = soundLibrary[name] else {
             Logger.audio.warning("Sound file not found: '\(name)'")
             return
         }
-        
-        // Restart queue if stopped due to idle timeout
+
+        guard prepareQueueForPlayback() else { return }
+
+        if ENABLE_LATENCY_MEASUREMENT {
+            recordLatencyCheckpoint(latencyId, point: .bufferScheduling)
+        }
+
+        enqueue(pcmSound, pitchVariation: pitchVariation, latencyId: latencyId, position: position, source: .keyboard)
+    }
+
+    /// Plays one sound of a sound pack preview. Unlike `play(sound:)` it takes the sound
+    /// directly, so previews never read from or change the live sound library.
+    func playPreview(_ pcmSound: PCMSound, source: VolumeLevels.Source) {
+        audioLifecycleLock.lock()
+        defer { audioLifecycleLock.unlock() }
+        guard isAudioReady(), prepareQueueForPlayback() else { return }
+        enqueue(pcmSound, pitchVariation: 0, latencyId: nil, position: nil, source: source)
+    }
+
+    /// Decodes the named files from a sound pack's folder without touching the live sound library.
+    func loadSounds(named names: [String], for soundpack: Soundpack) -> [String: PCMSound] {
+        guard let directory = resolveSoundDirectory(for: soundpack) else { return [:] }
+        var sounds: [String: PCMSound] = [:]
+        for name in Set(names) {
+            if let sound = loadPCMSound(from: directory.appendingPathComponent(name)) {
+                sounds[name] = sound
+            }
+        }
+        return sounds
+    }
+
+    /// Number of sounds in the live keyboard sound library.
+    var soundLibraryCount: Int {
+        audioLifecycleLock.lock()
+        defer { audioLifecycleLock.unlock() }
+        return soundLibrary.count
+    }
+
+    private func isAudioReady() -> Bool {
+        queueStateLock.lock()
+        let ready = isReady
+        queueStateLock.unlock()
+        if !ready {
+            Logger.audio.warning("Playback blocked: audio system not ready")
+        }
+        return ready
+    }
+
+    /// Restarts the queue if it stopped while idle, or resets the idle timer if it's running.
+    /// Returns false if the audio system stopped being ready in the meantime.
+    private func prepareQueueForPlayback() -> Bool {
         queueStateLock.lock()
         let isRunning = isQueueRunning
         let stillReady = isReady // could have changed during device reinit
         queueStateLock.unlock()
-        
+
         if stillReady && !isRunning {
             restartQueue()
         } else if stillReady && isRunning {
             resetIdleTimer()
         } else {
             Logger.audio.debug("Playback blocked: audio system became not ready during play()")
-            return
+            return false
         }
-        
-        if ENABLE_LATENCY_MEASUREMENT {
-            recordLatencyCheckpoint(latencyId, point: .bufferScheduling)
-        }
-        
-        enqueue(pcmSound, pitchVariation: pitchVariation, latencyId: latencyId, position: position, source: .keyboard)
+        return true
     }
 
     /// Creates a voice with a random pitch offset in [-variation, +variation] and starts it on the next callback

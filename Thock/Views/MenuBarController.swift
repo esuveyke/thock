@@ -268,6 +268,15 @@ class MenuBarController {
                     item.state = (soundpack == current) ? .on : .off
                     item.representedObject = soundpack
                     item.target = self
+                    item.view = SoundpackMenuRowView(
+                        title: soundpack.name,
+                        isCurrent: item.state == .on,
+                        onSelect: { [weak self, weak item] in
+                            guard let item else { return }
+                            self?.changeSoundpack(item)
+                        },
+                        onPreview: { SoundpackPreviewPlayer.shared.preview(soundpack) }
+                    )
                     if item.state == .on { hasActive = true }
                     subMenu.addItem(item)
                 }

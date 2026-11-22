@@ -49,6 +49,13 @@ class SoundpackConfigManager {
         return mouseConfig
     }
     
+    // MARK: - Preview
+
+    /// Reads a sound pack's config without making it the current keyboard or mouse config.
+    func config(for soundpack: Soundpack) -> SoundpackConfig? {
+        return loadConfig(at: soundpack.path, name: soundpack.name)
+    }
+
     // MARK: - Private
     
     private func loadConfig(at path: String, name: String) -> SoundpackConfig? {
